@@ -36,6 +36,7 @@ func NewBackupCommand() *cobra.Command {
 	command.AddCommand(
 		newFullBackupCommand(),
 		newTableBackupCommand(),
+		newRawBackupCommand(),
 	)
 
 	command.PersistentFlags().StringP(
@@ -134,7 +135,7 @@ func newFullBackupCommand() *cobra.Command {
 			updateCh := utils.StartProgress(
 				ctx, "Full Backup", int64(approximateRegions), !HasLogFile())
 			err = client.BackupRanges(
-				ctx, ranges, backupTS, rate, concurrency, updateCh)
+				ctx, ranges, backupTS, rate, concurrency, updateCh, false)
 			if err != nil {
 				return err
 			}
@@ -273,7 +274,7 @@ func newTableBackupCommand() *cobra.Command {
 			updateCh := utils.StartProgress(
 				ctx, "Table Backup", int64(approximateRegions), !HasLogFile())
 			err = client.BackupRanges(
-				ctx, ranges, backupTS, rate, concurrency, updateCh)
+				ctx, ranges, backupTS, rate, concurrency, updateCh, false)
 			if err != nil {
 				return err
 			}
@@ -317,5 +318,86 @@ func newTableBackupCommand() *cobra.Command {
 	if err := command.MarkFlagRequired("table"); err != nil {
 		panic(err)
 	}
+	return command
+}
+
+// newRawBackupCommand return a raw kv range backup subcommand.
+func newRawBackupCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "raw",
+		Short: "backup a raw kv range",
+		RunE: func(command *cobra.Command, _ []string) error {
+			ctx, cancel := context.WithCancel(defaultContext)
+			defer cancel()
+
+			mgr, err := GetDefaultMgr()
+			if err != nil {
+				return err
+			}
+			defer mgr.Close()
+
+			client, err := backup.NewBackupClient(ctx, mgr)
+			if err != nil {
+				return err
+			}
+			u, err := storage.ParseBackendFromFlags(command.Flags(), FlagStorage)
+			if err != nil {
+				return err
+			}
+
+			err = client.SetStorage(u)
+			if err != nil {
+				return err
+			}
+
+			start, err := command.Flags().GetString("start")
+			if err != nil {
+				return err
+			}
+
+			end, err := command.Flags().GetString("end")
+			if err != nil {
+				return err
+			}
+
+			rate, err := command.Flags().GetUint64("ratelimit")
+			if err != nil {
+				return err
+			}
+			concurrency, err := command.Flags().GetUint32("concurrency")
+			if err != nil {
+				return err
+			}
+			if concurrency == 0 {
+				return errors.New("at least one thread required")
+			}
+
+			ranges := []backup.Range{{StartKey: []byte(start), EndKey: []byte(end)}}
+
+			approximateRegions := 0
+			for _, r := range ranges {
+				var regionCount int
+				regionCount, err = client.GetRangeRegionCount(r.StartKey, r.EndKey)
+				if err != nil {
+					return err
+				}
+				approximateRegions += regionCount
+			}
+
+			updateCh := utils.StartProgress(
+				ctx, "Raw Backup", int64(approximateRegions), !HasLogFile())
+
+			err = client.BackupRanges(
+				ctx, ranges, 0, rate, concurrency, updateCh, true)
+			if err != nil {
+				return err
+			}
+			close(updateCh)
+
+			return client.SaveBackupMeta()
+		},
+	}
+	command.Flags().StringP("start", "", "", "backup raw kv start key")
+	command.Flags().StringP("end", "", "", "backup raw kv end key")
 	return command
 }

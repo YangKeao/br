@@ -272,6 +272,7 @@ func (bc *Client) BackupRanges(
 	rate uint64,
 	concurrency uint32,
 	updateCh chan<- struct{},
+	isRawKv bool,
 ) error {
 	start := time.Now()
 	defer func() {
@@ -285,7 +286,7 @@ func (bc *Client) BackupRanges(
 	go func() {
 		for _, r := range ranges {
 			err := bc.backupRange(
-				ctx, r.StartKey, r.EndKey, backupTS, rate, concurrency, updateCh)
+				ctx, r.StartKey, r.EndKey, backupTS, rate, concurrency, updateCh, isRawKv)
 			if err != nil {
 				errCh <- err
 				return
@@ -332,6 +333,7 @@ func (bc *Client) backupRange(
 	rateMBs uint64,
 	concurrency uint32,
 	updateCh chan<- struct{},
+	isRawKv bool,
 ) error {
 	// The unit of rate limit in protocol is bytes per second.
 	rateLimit := rateMBs * 1024 * 1024
@@ -357,6 +359,7 @@ func (bc *Client) backupRange(
 		StorageBackend: bc.backend,
 		RateLimit:      rateLimit,
 		Concurrency:    concurrency,
+		IsRawKv:        isRawKv,
 	}
 	push := newPushDown(ctx, bc.mgr, len(allStores))
 
@@ -377,6 +380,7 @@ func (bc *Client) backupRange(
 
 	bc.backupMeta.StartVersion = backupTS
 	bc.backupMeta.EndVersion = backupTS
+	bc.backupMeta.IsRawKv = isRawKv
 	log.Info("backup time range",
 		zap.Reflect("StartVersion", backupTS),
 		zap.Reflect("EndVersion", backupTS))
@@ -677,6 +681,7 @@ func SendBackup(
 
 // GetRangeRegionCount get region count by pd http api
 func (bc *Client) GetRangeRegionCount(startKey, endKey []byte) (int, error) {
+	// TODO get region count by [startKey, endKey)
 	return bc.mgr.GetRegionCount()
 }
 
