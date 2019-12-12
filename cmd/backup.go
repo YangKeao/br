@@ -354,8 +354,16 @@ func newRawBackupCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			start, err = utils.ParseKey(command.Flags(), start)
+			if err != nil {
+				return err
+			}
 
 			end, err := command.Flags().GetString("end")
+			if err != nil {
+				return err
+			}
+			end, err = utils.ParseKey(command.Flags(), end)
 			if err != nil {
 				return err
 			}
@@ -397,6 +405,7 @@ func newRawBackupCommand() *cobra.Command {
 			return client.SaveBackupMeta()
 		},
 	}
+	command.Flags().StringP("format", "", "raw", "raw key format")
 	command.Flags().StringP("start", "", "", "backup raw kv start key")
 	command.Flags().StringP("end", "", "", "backup raw kv end key")
 	return command
