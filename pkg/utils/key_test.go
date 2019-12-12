@@ -35,7 +35,7 @@ func (r *testKeySuite) TestParseKey(c *C) {
 
 	flagSet = &pflag.FlagSet{}
 	flagSet.String("format", "notSupport", "")
-	parsedKey, err = ParseKey(flagSet, rawKey)
+	_, err = ParseKey(flagSet, rawKey)
 	c.Assert(err, ErrorMatches, "*unknown format*")
 
 }

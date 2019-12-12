@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// ParseKey parse key by given format
 func ParseKey(flags *pflag.FlagSet, key string) (string, error) {
 	switch flags.Lookup("format").Value.String() {
 	case "raw":
